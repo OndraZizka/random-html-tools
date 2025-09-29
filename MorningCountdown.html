@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Morning Countdown</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for a cheerful, large-display app */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8; /* Light blue-gray background */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .countdown-container {
+            max-width: 95%;
+            width: 650px;
+            background: linear-gradient(135deg, #ffffff, #e0f2fe);
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.1);
+            border-radius: 20px;
+            padding: 32px;
+            text-align: center;
+        }
+        .countdown-display {
+            font-size: 8rem; /* Extremely large font for easy viewing */
+            font-weight: 900;
+            color: #0c4a6e; /* Dark blue */
+            line-height: 1;
+            margin: 20px 0;
+            text-shadow: 4px 4px 0px rgba(255, 255, 255, 0.7);
+        }
+        /* Responsive adjustments */
+        @media (max-width: 640px) {
+            .countdown-display {
+                font-size: 5rem;
+            }
+        }
+        .settings-card {
+            background-color: #ffffff;
+            border: 1px solid #bae6fd;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+            margin-top: 20px;
+        }
+        .loading-spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #3b82f6;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            display: none; /* Initially hidden */
+            margin: 0 auto 10px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="countdown-container">
+        <h1 class="text-3xl font-bold text-blue-700 mb-4">Morning Rush Countdown</h1>
+        
+        <!-- Large Countdown Display -->
+        <div id="countdown-display" class="countdown-display">--:--</div>
+        <p id="target-info" class="text-lg text-gray-600 mb-6">Target: Loading...</p>
+
+        <!-- Settings Area -->
+        <div class="settings-card">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">Settings</h2>
+            <p class="text-sm text-blue-600 mb-4 font-semibold">
+                The routine runs from 60 to 0 minutes remaining. Fixed steps are announced precisely; the interval setting controls reminders between steps.
+            </p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                
+                <!-- Target Time Picker -->
+                <div class="col-span-1">
+                    <label for="target-time" class="block text-sm font-medium text-gray-700 mb-1">Leave Time (HH:MM)</label>
+                    <input type="time" id="target-time" value="08:00" class="w-full p-2 border border-blue-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150">
+                </div>
+
+                <!-- Interval Picker (NOW ENABLED) -->
+                <div class="col-span-1">
+                    <label for="interval-minutes" class="block text-sm font-medium text-gray-700 mb-1">Speak Every (Minutes)</label>
+                    <input type="number" id="interval-minutes" value="10" min="1" max="60" class="w-full p-2 border border-blue-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150">
+                </div>
+
+                <!-- Language Selector -->
+                <div class="col-span-1">
+                    <label for="voice-language" class="block text-sm font-medium text-gray-700 mb-1">Language</label>
+                    <select id="voice-language" class="w-full p-2 border border-blue-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150">
+                        <option value="en-US">English (US)</option>
+                        <option value="de-DE">German</option>
+                        <option value="cs-CZ">Czech</option>
+                    </select>
+                </div>
+                
+                <!-- Voice Selector -->
+                <div class="col-span-1">
+                    <label for="selected-voice" class="block text-sm font-medium text-gray-700 mb-1">Voice Model</label>
+                    <select id="selected-voice" class="w-full p-2 border border-blue-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150">
+                        <!-- Options populated by JS -->
+                    </select>
+                </div>
+            </div>
+
+            <!-- Status and Action -->
+            <div class="mt-6 flex flex-col sm:flex-row justify-between items-center space-y-3 sm:space-y-0">
+                <button id="test-voice-button" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-150 transform hover:scale-105">
+                    Test Random Scheduled Prompt
+                </button>
+                <div id="status-info" class="text-base font-medium text-yellow-600 bg-yellow-100 p-2 rounded-lg">
+                    Status: Initializing...
+                </div>
+            </div>
+            
+            <p id="user-info" class="text-xs text-gray-400 mt-4">User ID: N/A</p>
+            <div id="loading-spinner" class="loading-spinner"></div>
+            <p id="error-message" class="text-sm text-red-600 mt-2 hidden"></p>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // IMPORTANT: Global variables provided by the Canvas environment
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Configuration and State
+        let db, auth;
+        let userId = null;
+        let lastSpokenSpeechKey = null; // Tracks the last unique announcement key
+        let countdownInterval;
+        let currentAudio = null; // Stores the currently playing Audio object for interruption
+        let saveTimer; // Timer for debouncing save operations
+        const SETTINGS_DOC_PATH = `/artifacts/${appId}/users/`;
+        
+        // TTS API Configuration
+        const TTS_MODEL_NAME = "gemini-2.5-flash-preview-tts";
+        const API_KEY = "";
+        const TTS_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${TTS_MODEL_NAME}:generateContent?key=${API_KEY}`;
+        const SAMPLE_RATE = 24000; // Expected sample rate for the TTS API
+
+        // DOM Elements
+        const targetTimeInput = document.getElementById('target-time');
+        const intervalInput = document.getElementById('interval-minutes');
+        const languageSelect = document.getElementById('voice-language');
+        const voiceSelect = document.getElementById('selected-voice');
+        const countdownDisplay = document.getElementById('countdown-display');
+        const targetInfo = document.getElementById('target-info');
+        const userInfo = document.getElementById('user-info');
+        const errorMessage = document.getElementById('error-message');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const statusInfo = document.getElementById('status-info');
+        const testVoiceButton = document.getElementById('test-voice-button');
+
+        // Available voices mapped by language code
+        const VOICE_MODELS = {
+            'en-US': [
+                { name: 'Zephyr', default: true, info: 'Bright and Encouraging' },
+                { name: 'Puck', default: false, info: 'Upbeat' },
+                { name: 'Kore', default: false, info: 'Firm' },
+                { name: 'Callirrhoe', default: false, info: 'Easy-going' },
+            ],
+            'de-DE': [
+                { name: 'Charon', default: true, info: 'Informative' },
+                { name: 'Iapetus', default: false, info: 'Clear' },
+            ],
+            'cs-CZ': [
+                { name: 'Puck', default: true, info: 'Upbeat' },
+                { name: 'Kore', default: false, info: 'Firm' },
+                { name: 'Zephyr', default: false, info: 'Bright' },
+            ]
+        };
+        
+        // --- FIXED SCHEDULED MESSAGES (The Core Routine) ---
+        const SCHEDULED_MESSAGES = {
+            'en-US': {
+                60: { action: "Wake up, sleepyhead! No rush, but the new day is waiting for you.", type: 'routine' },
+                55: { action: "Good morning, star! Time to gently get out of bed now. We love you!", type: 'routine' },
+                52: { action: "Okay, now really, really wake up. Let’s make this a great morning.", type: 'routine' },
+                50: { action: "Seriously, I mean it! Get up and go pee before anything else.", type: 'routine' },
+                45: { action: "Time to dress up! Put on those happy clothes and start the day right.", type: 'routine' },
+                40: { action: "Breakfast time! Get some good energy for all the fun activities today.", type: 'routine' },
+                30: { action: "Half an hour left! Go clean those teeth until they sparkle.", type: 'routine' },
+                25: { action: "Let’s prepare your snack. What delicious thing are you packing today?", type: 'routine' },
+                20: { action: "Backpack check! What do you need for school, and don't forget your 'krouzek' or club today!", type: 'routine' },
+                15: { action: "Quick break! You've earned a few minutes of relaxation.", type: 'routine' },
+                10: { action: "Prepare to leave. Comb your hair and choose your final layer of clothes according to the weather.", type: 'routine' },
+                5: { action: "Almost there! Drink some water and get your shoes ready by the door. Let's leave soon!", type: 'routine' },
+                0: { action: "GO! Shoes on, backpack ready, wait in the corridor. Have a fantastic day!", type: 'routine' },
+            },
+            'de-DE': {
+                60: { action: "Wach auf, Schlafmütze! Kein Stress, aber der neue Tag wartet auf dich.", type: 'routine' },
+                55: { action: "Guten Morgen, kleiner Star! Jetzt ist es Zeit, sanft aufzustehen. Wir lieben dich!", type: 'routine' },
+                52: { action: "Alles klar, jetzt wirklich, wirklich aufwachen! Lass uns diesen Morgen toll machen.", type: 'routine' },
+                50: { action: "Im Ernst, das meine ich! Steh auf und geh zuerst auf die Toilette.", type: 'routine' },
+                45: { action: "Zeit zum Anziehen! Zieh dir deine Gute-Laune-Klamotten an und starte gut in den Tag.", type: 'routine' },
+                40: { action: "Frühstückszeit! Hol dir gute Energie für all die tollen Aktivitäten heute.", type: 'routine' },
+                30: { action: "Nur noch eine halbe Stunde! Putz dir die Zähne, bis sie glänzen.", type: 'routine' },
+                25: { action: "Lass uns deinen Snack vorbereiten. Was Leckeres packst du heute ein?", type: 'routine' },
+                20: { action: "Rucksack-Check! Was brauchst du für die Schule, und vergiss deinen 'krouzek' oder deinen Kurs heute nicht!", type: 'routine' },
+                15: { action: "Kurze Pause! Du hast dir ein paar Minuten Entspannung verdient.", type: 'routine' },
+                10: { action: "Mach dich bereit zum Aufbruch. Kämm dir die Haare und wähle die letzte Kleidungsschicht entsprechend dem Wetter.", type: 'routine' },
+                5: { action: "Fast geschafft! Trink etwas Wasser und stell deine Schuhe an die Tür. Lass uns bald gehen!", type: 'routine' },
+                0: { action: "LOS! Schuhe an, Rucksack bereit, im Flur warten. Hab einen fantastischen Tag!", type: 'routine' },
+            },
+            'cs-CZ': {
+                60: { action: "Vstávej, ospalče! Nikam nespěchej, ale nový den už čeká.", type: 'routine' },
+                55: { action: "Dobré ráno, hvězdičko! Je čas pomalu vstát z postele. Máme tě rádi!", type: 'routine' },
+                52: { action: "Dobře, a teď už vážně, ale vážně vstávej. Pojďme si udělat skvělé ráno.", type: 'routine' },
+                50: { action: "Vážně, myslím to upřímně! Vstávej a jdi nejdřív na záchod.", type: 'routine' },
+                45: { action: "Čas se obléknout! Obleč si ty veselé šaty a začni den správně.", type: 'routine' },
+                40: { action: "Čas na snídani! Naber energii na všechny dnešní zábavné aktivity.", type: 'routine' },
+                30: { action: "Už jen půl hodiny! Jdi si vyčistit zuby, dokud se nebudou lesknout.", type: 'routine' },
+                25: { action: "Pojďme připravit svačinu. Co si dneska zabalíš za dobrotu?", type: 'routine' },
+                20: { action: "Kontrola batohu! Co potřebuješ do školy a nezapomeň na svůj 'krouzek' nebo kroužek dnes!", type: 'routine' },
+                15: { action: "Rychlá pauza! Zasloužil sis pár minut odpočinku.", type: 'routine' },
+                10: { action: "Připrav se k odchodu. Učeš si vlasy a vyber si vrchní vrstvu oblečení podle počasí.", type: 'routine' },
+                5: { action: "Už skoro! Napij se vody a připrav si boty ke dveřím. Pojďme brzy!", type: 'routine' },
+                0: { action: "JDI! Boty na nohy, batoh připravený, počkej na chodbě. Měj fantastický den!", type: 'routine' },
+            },
+        };
+        const SCHEDULED_MINUTES = [60, 55, 52, 50, 45, 40, 30, 25, 20, 15, 10, 5, 0];
+
+
+        // --- Utility Functions for TTS PCM to WAV Conversion (Unchanged) ---
+        function base64ToArrayBuffer(base64) {
+            const binaryString = atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        function pcmToWav(pcm16, sampleRate) {
+            const numChannels = 1;
+            const bytesPerSample = 2; // 16-bit audio
+            const dataLength = pcm16.length * bytesPerSample;
+            const buffer = new ArrayBuffer(44 + dataLength);
+            const view = new DataView(buffer);
+            let offset = 0;
+
+            function writeString(str) {
+                for (let i = 0; i < str.length; i++) {
+                    view.setUint8(offset++, str.charCodeAt(i));
+                }
+            }
+
+            // RIFF header
+            writeString('RIFF');
+            view.setUint32(offset, 36 + dataLength, true); offset += 4;
+            writeString('WAVE');
+
+            // FMT sub-chunk
+            writeString('fmt ');
+            view.setUint32(offset, 16, true); offset += 4; // Sub-chunk size
+            view.setUint16(offset, 1, true); offset += 2;  // Audio format (1 = PCM)
+            view.setUint16(offset, numChannels, true); offset += 2;
+            view.setUint32(offset, sampleRate, true); offset += 4;
+            view.setUint32(offset, sampleRate * numChannels * bytesPerSample, true); offset += 4; // Byte rate
+            view.setUint16(offset, numChannels * bytesPerSample, true); offset += 2; // Block align
+            view.setUint16(offset, bytesPerSample * 8, true); offset += 2; // Bits per sample (16)
+
+            // DATA sub-chunk
+            writeString('data');
+            view.setUint32(offset, dataLength, true); offset += 4;
+
+            // Write PCM data
+            for (let i = 0; i < pcm16.length; i++) {
+                view.setInt16(offset, pcm16[i], true);
+                offset += 2;
+            }
+
+            return new Blob([view], { type: 'audio/wav' });
+        }
+        
+        // --- Firebase & Initialization Functions ---
+
+        function displayError(message) {
+            console.error(message);
+            errorMessage.textContent = `Error: ${message}`;
+            errorMessage.classList.remove('hidden');
+            setTimeout(() => errorMessage.classList.add('hidden'), 8000);
+        }
+
+        function populateVoiceOptions() {
+            const lang = languageSelect.value;
+            const voices = VOICE_MODELS[lang] || [];
+            
+            voiceSelect.innerHTML = '';
+            voices.forEach(v => {
+                const option = document.createElement('option');
+                option.value = v.name;
+                option.textContent = `${v.name} (${v.info})`;
+                voiceSelect.appendChild(option);
+            });
+            // Removed the redundant dispatchEvent to fix dropdown focus jitter
+        }
+
+        /**
+         * Debounces the call to saveSettings to prevent rapid Firestore writes and loops.
+         */
+        function debounceSaveSettings() {
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(saveSettings, 100); 
+        }
+
+        async function initializeFirebase() {
+            populateVoiceOptions();
+
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                
+                userId = auth.currentUser?.uid || crypto.randomUUID();
+                userInfo.textContent = `User ID: ${userId}`;
+                
+                subscribeToSettings();
+
+                // Listeners updated to use the debounced function
+                targetTimeInput.addEventListener('change', debounceSaveSettings);
+                intervalInput.addEventListener('change', debounceSaveSettings);
+                languageSelect.addEventListener('change', () => {
+                    populateVoiceOptions();
+                    debounceSaveSettings();
+                });
+                voiceSelect.addEventListener('change', debounceSaveSettings);
+
+                // testVoice is now async
+                testVoiceButton.addEventListener('click', () => testVoice());
+
+            } catch (error) {
+                displayError(`Firebase initialization or authentication failed: ${error.message}`);
+                startCountdownLoop(); // Start anyway with default settings
+            }
+        }
+
+        async function saveSettings() {
+            if (!userId || !db) {
+                console.warn("Firestore not ready. Settings not saved.");
+                return;
+            }
+            try {
+                const settingsData = {
+                    targetTime: targetTimeInput.value,
+                    intervalMinutes: parseInt(intervalInput.value) || 10,
+                    voiceLang: languageSelect.value,
+                    selectedVoice: voiceSelect.value || VOICE_MODELS[languageSelect.value]?.[0]?.name,
+                    updatedAt: new Date().toISOString()
+                };
+
+                const docRef = doc(db, SETTINGS_DOC_PATH, userId, 'countdown_settings', 'settings');
+                await setDoc(docRef, settingsData, { merge: true });
+            } catch (error) {
+                displayError(`Failed to save settings: ${error.message}`);
+            }
+        }
+
+        function subscribeToSettings() {
+            const docRef = doc(db, SETTINGS_DOC_PATH, userId, 'countdown_settings', 'settings');
+            onSnapshot(docRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    targetTimeInput.value = data.targetTime || '08:00';
+                    intervalInput.value = data.intervalMinutes || 10;
+                    languageSelect.value = data.voiceLang || 'en-US';
+                    
+                    populateVoiceOptions(); 
+                    voiceSelect.value = data.selectedVoice || VOICE_MODELS[data.voiceLang]?.[0]?.name;
+                } else {
+                    saveSettings(); 
+                }
+                startCountdownLoop();
+            }, (error) => {
+                displayError(`Error fetching settings: ${error.message}`);
+            });
+        }
+        
+        // --- Core Countdown and Announcement Logic (Mostly Unchanged) ---
+
+        /**
+         * Finds the next scheduled step (the next routine task the user should be doing).
+         * @param {number} currentMinutesRemaining 
+         * @param {string} lang 
+         * @returns {{minutes: number, action: string, type: string} | null} The next step object.
+         */
+        function getNextScheduledAction(currentMinutesRemaining, lang) {
+            const steps = SCHEDULED_MESSAGES[lang];
+            const sortedMinutes = SCHEDULED_MINUTES.filter(m => m < currentMinutesRemaining).sort((a, b) => b - a);
+            
+            // Find the highest minute marker that is less than currentMinutesRemaining
+            const nextScheduledMinute = sortedMinutes[0]; 
+
+            if (nextScheduledMinute === undefined) {
+                 // We are past the whole 1-hour schedule (or still at 60)
+                 return null;
+            }
+
+            // The 'next' action to prompt for is actually the one corresponding to the *last* major minute marker passed
+            const actionMinute = nextScheduledMinute; 
+            
+            // For interval reminders, we want to look forward to the next major step
+            // Let's find the lowest scheduled minute marker that is strictly less than currentMinutesRemaining
+            const upcomingMinutes = SCHEDULED_MINUTES.filter(m => m < currentMinutesRemaining).sort((a, b) => a - b);
+            
+            if (upcomingMinutes.length === 0) return null; // Only the 60m step remains
+
+            const closestUpcomingMinute = upcomingMinutes[0];
+            
+            // Return the *content* of the closest upcoming step
+            return {
+                minutes: closestUpcomingMinute,
+                action: steps[closestUpcomingMinute].action.split('!')[0] + '.', // Use a short summary
+                type: 'reminder'
+            };
+        }
+
+
+        /**
+         * Main function to calculate and update the countdown.
+         */
+        function updateCountdown() {
+            const now = new Date();
+            const dayOfWeek = now.getDay();
+            const [targetHours, targetMinutes] = targetTimeInput.value.split(':').map(Number);
+            const intervalMinutes = parseInt(intervalInput.value) || 10;
+            const lang = languageSelect.value;
+            
+            // 1. Weekend Check
+            if (dayOfWeek === 0 || dayOfWeek === 6) {
+                countdownDisplay.textContent = "WEEKEND";
+                statusInfo.textContent = "Status: Weekend Mode - Time is off!";
+                statusInfo.classList.remove('text-yellow-600', 'bg-yellow-100');
+                statusInfo.classList.add('text-green-600', 'bg-green-100');
+                clearInterval(countdownInterval);
+                return;
+            }
+
+            // 2. Calculate Target Date/Time
+            let targetDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), targetHours, targetMinutes, 0);
+            if (targetDate.getTime() < now.getTime()) {
+                targetDate.setDate(targetDate.getDate() + 1);
+            }
+
+            // Update target info display
+            const targetTimeStr = targetDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const targetDayStr = targetDate.toLocaleDateString([], { weekday: 'short' });
+            targetInfo.textContent = `Target: ${targetTimeStr} (${targetDayStr})`;
+
+            // 3. Calculate remaining time
+            const timeDifferenceMs = targetDate.getTime() - now.getTime();
+            const totalRemainingMinutes = Math.ceil(timeDifferenceMs / (1000 * 60));
+            
+            let hours = Math.floor(timeDifferenceMs / (1000 * 60 * 60));
+            let minutes = Math.floor((timeDifferenceMs % (1000 * 60 * 60)) / (1000 * 60));
+            
+            const paddedHours = String(hours).padStart(2, '0');
+            const paddedMinutes = String(minutes).padStart(2, '0');
+
+            // 4. Handle countdown complete (less than 1 minute remaining)
+            if (timeDifferenceMs <= 60000) {
+                if (lastSpokenSpeechKey !== 'SCHED_0') {
+                    speakTime(0, true);
+                    lastSpokenSpeechKey = 'SCHED_0';
+                }
+                countdownDisplay.textContent = "TIME TO GO!";
+                statusInfo.textContent = "Status: GO TIME!";
+                statusInfo.classList.remove('text-yellow-600', 'bg-yellow-100', 'text-blue-600', 'bg-blue-100');
+                statusInfo.classList.add('text-red-600', 'bg-red-100');
+                clearInterval(countdownInterval);
+                return;
+            }
+            
+            // 5. Implement > 1 Hour Silence Check (FIXED STATUS TEXT)
+            if (totalRemainingMinutes > 60) {
+                countdownDisplay.textContent = `${paddedHours}:${paddedMinutes}`;
+                statusInfo.textContent = `Status: Early Morning (Routine starts 1 hour before ${targetTimeStr})`;
+                statusInfo.classList.remove('text-red-600', 'bg-red-100', 'text-yellow-600', 'bg-yellow-100');
+                statusInfo.classList.add('text-blue-600', 'bg-blue-100');
+                lastSpokenSpeechKey = null; 
+                return;
+            }
+
+            // --- Inside the 1-Hour Rush Window (TTS Active) ---
+
+            // 6. Display remaining time
+            countdownDisplay.textContent = `${paddedHours}:${paddedMinutes}`;
+            statusInfo.textContent = `Status: Morning Routine Active (Interval: ${intervalMinutes} min)`;
+            statusInfo.classList.remove('text-red-600', 'bg-red-100', 'text-blue-600', 'bg-blue-100');
+            statusInfo.classList.add('text-yellow-600', 'bg-yellow-100');
+
+            // 7. Check for announcements (Scheduled OR Interval)
+            const isScheduledTime = SCHEDULED_MINUTES.includes(totalRemainingMinutes);
+            // Check if it's an interval time, BUT not already a scheduled time
+            const isIntervalTime = (totalRemainingMinutes > 0 && totalRemainingMinutes < 60 && totalRemainingMinutes % intervalMinutes === 0 && !isScheduledTime);
+            
+            let speechKey = null;
+            if (isScheduledTime) {
+                speechKey = `SCHED_${totalRemainingMinutes}`;
+            } else if (isIntervalTime) {
+                speechKey = `INTERVAL_${totalRemainingMinutes}`;
+            }
+
+            if (speechKey && speechKey !== lastSpokenSpeechKey) {
+                // If it's a scheduled time, use the fixed message (isRoutine=true)
+                if (isScheduledTime) {
+                    speakTime(totalRemainingMinutes, true);
+                } 
+                // If it's an interval time, generate a reminder (isRoutine=false)
+                else if (isIntervalTime) {
+                    speakTime(totalRemainingMinutes, false);
+                }
+                lastSpokenSpeechKey = speechKey;
+            }
+            
+            // If the time is past 60 minutes and not a scheduled minute, reset the tracker to allow a new speech event
+            if (totalRemainingMinutes < 60 && !isScheduledTime && !isIntervalTime && lastSpokenSpeechKey) {
+                if (lastSpokenSpeechKey.includes(`SCHED_${totalRemainingMinutes + 1}`) || 
+                    lastSpokenSpeechKey.includes(`INTERVAL_${totalRemainingMinutes + 1}`)) {
+                        // We passed the last spoken minute, reset tracker
+                        lastSpokenSpeechKey = null;
+                }
+            }
+        }
+
+        /**
+         * Formats the remaining time and the scheduled message into a prompt for TTS.
+         * @param {number} totalMinutesRemaining 
+         * @param {boolean} isRoutineStep If true, use the fixed routine text; otherwise, generate a reminder for the next step.
+         * @returns {string} The complete prompt to send to the TTS API.
+         */
+        function generateTtsPrompt(totalMinutesRemaining, lang, isRoutineStep) {
+            const steps = SCHEDULED_MESSAGES[lang];
+            const routineAction = steps[totalMinutesRemaining]?.action;
+            const hours = Math.floor(totalMinutesRemaining / 60);
+            const minutes = totalMinutesRemaining % 60;
+            
+            const timeString = (h, m) => {
+                let parts = [];
+                if (h > 0) parts.push(`${h} ${h === 1 ? 'hour' : 'hours'}`);
+                if (m > 0) parts.push(`${m} ${m === 1 ? 'minute' : 'minutes'}`);
+                return parts.join(' and ');
+            };
+
+            // 1. Routine Step (Priority 1)
+            if (isRoutineStep && routineAction) {
+                const timePrefix = totalMinutesRemaining === 0 ? '' : `You have ${timeString(hours, minutes)} remaining. `;
+                return `Say with a bright and encouraging tone: "${timePrefix}${routineAction}"`;
+            }
+
+            // 2. Interval Reminder (Priority 2)
+            if (!isRoutineStep) {
+                const nextStepDetails = getNextScheduledAction(totalMinutesRemaining, lang);
+                
+                if (nextStepDetails) {
+                    const nextAction = nextStepDetails.action;
+                    const timeToNext = totalMinutesRemaining - nextStepDetails.minutes;
+                    
+                    const nextTimeStr = (t) => {
+                         if (t === 1) return 'in one minute';
+                         if (t <= 5) return `very soon, in ${t} minutes`;
+                         return `in about ${t} minutes`;
+                    };
+
+                    const reminderText = `Quick check! Your next major task, ${nextAction}, is coming up ${nextTimeStr(timeToNext)}. Keep moving!`;
+                    
+                    if (lang === 'de-DE') {
+                         return `Sage mit einer freundlichen Stimme: "Kurze Kontrolle! Deine nächste Aufgabe, ${nextAction}, kommt ${nextTimeStr(timeToNext)}."`;
+                    } else if (lang === 'cs-CZ') {
+                         return `Řekněte jasným hlasem: "Rychlá kontrola! Tvůj další velký úkol, ${nextAction}, se blíží ${nextTimeStr(timeToNext)}."`;
+                    } else {
+                         return `Say with a supportive and clear tone: "${reminderText}"`;
+                    }
+                }
+            }
+            
+            // Fallback
+            return `Say: "Attention! You have ${timeString(hours, minutes)} remaining. Please proceed with your routine."`;
+        }
+
+        /**
+         * Uses the Gemini TTS API to announce the remaining time.
+         * * @param {number} totalMinutesRemaining 
+         * @param {boolean} isRoutineStep
+         * @returns {Promise<void>} A promise that resolves when the audio finishes playing or errors out.
+         */
+        async function speakTime(totalMinutesRemaining, isRoutineStep) {
+            let lang = languageSelect.value;
+            let voiceName = voiceSelect.value;
+            
+            const textToSpeak = generateTtsPrompt(totalMinutesRemaining, lang, isRoutineStep);
+
+            loadingSpinner.style.display = 'block';
+
+            // Stop any currently playing audio to prevent overlap
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio.src = '';
+                currentAudio = null;
+            }
+
+            const payload = {
+                contents: [{ parts: [{ text: textToSpeak }] }],
+                generationConfig: {
+                    responseModalities: ["AUDIO"],
+                    speechConfig: {
+                        voiceConfig: {
+                            prebuiltVoiceConfig: { voiceName: voiceName }
+                        }
+                    }
+                },
+                model: TTS_MODEL_NAME
+            };
+
+            try {
+                const maxRetries = 5;
+                for (let i = 0; i < maxRetries; i++) {
+                    const response = await fetch(TTS_API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (response.ok) {
+                        const result = await response.json();
+                        const part = result?.candidates?.[0]?.content?.parts?.[0];
+                        const audioData = part?.inlineData?.data;
+
+                        if (audioData) {
+                            const pcmData = base64ToArrayBuffer(audioData);
+                            const pcm16 = new Int16Array(pcmData);
+                            const wavBlob = pcmToWav(pcm16, SAMPLE_RATE);
+                            const audioUrl = URL.createObjectURL(wavBlob);
+                            
+                            const audio = new Audio(audioUrl);
+                            
+                            // Set the new audio object as the current one
+                            currentAudio = audio;
+                            
+                            // Return a Promise that resolves when the audio is done playing/erroring
+                            return new Promise(resolve => {
+                                // Explicitly revoke the Blob URL and release global reference
+                                const cleanupAndResolve = () => {
+                                    audio.removeEventListener('ended', cleanupAndResolve);
+                                    audio.removeEventListener('error', cleanupAndResolve);
+                                    URL.revokeObjectURL(audioUrl);
+                                    console.log(`Cleaned up object URL: ${audioUrl}`);
+
+                                    // Release global reference only if it's the current one
+                                    if (audio === currentAudio) {
+                                        currentAudio = null; 
+                                    }
+                                    resolve(); // Resolve the promise
+                                };
+
+                                audio.addEventListener('ended', cleanupAndResolve);
+                                audio.addEventListener('error', cleanupAndResolve);
+
+                                audio.play().catch(e => {
+                                    console.error("Error playing audio:", e);
+                                    cleanupAndResolve(); // Resolve promise immediately on play error
+                                });
+                            });
+                        } else {
+                            displayError("TTS response was missing audio data.");
+                            break;
+                        }
+                    } else if (response.status === 429 && i < maxRetries - 1) {
+                        const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                    } else {
+                        const errorText = await response.text();
+                        displayError(`TTS API failed (${response.status}): ${errorText}`);
+                        break;
+                    }
+                }
+            } catch (error) {
+                displayError(`TTS fetching failed: ${error.message}`);
+            } finally {
+                loadingSpinner.style.display = 'none';
+            }
+        }
+        
+        /**
+         * Triggers a random scheduled TTS message for testing purposes.
+         */
+        async function testVoice() {
+            const scheduledMins = SCHEDULED_MINUTES.filter(m => m > 0);
+            const randomIndex = Math.floor(Math.random() * scheduledMins.length);
+            const randomMinute = scheduledMins[randomIndex];
+            
+            // 1. Play the first routine step announcement, and WAIT for it to finish.
+            // await ensures the next line doesn't run until the audio is complete.
+            await speakTime(randomMinute, true); 
+            
+            // 2. Play the second reminder, only if the interval is set to allow it
+            const intervalMins = parseInt(intervalInput.value) || 10;
+            if (intervalMins < 60) {
+                 const testReminderMin = randomMinute + 1; 
+                 if (testReminderMin < 60) {
+                      // The previous promise resolved, so currentAudio is null, and it's safe to start the next one immediately.
+                      speakTime(testReminderMin, false); 
+                 }
+            }
+        }
+
+        /**
+         * Starts the periodic countdown update.
+         */
+        function startCountdownLoop() {
+            if (countdownInterval) clearInterval(countdownInterval);
+            updateCountdown(); 
+            countdownInterval = setInterval(updateCountdown, 5000);
+        }
+
+        window.onload = initializeFirebase;
+    </script>
+</body>
+</html>
