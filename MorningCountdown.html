@@ -129,9 +129,6 @@
 
     <!-- Firebase SDKs -->
     <script type="module">
-        // FIX: The import statements MUST be the first lines in an inline module script.
-        // We ensure this and call initialization directly at the end, which is more robust
-        // in restrictive iframe/preview environments like html-preview.github.io.
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, onSnapshot, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
@@ -169,49 +166,42 @@
         const statusInfo = document.getElementById('status-info');
         const testVoiceButton = document.getElementById('test-voice-button');
 
-        // Available voices mapped by language code (Expanded List)
+        // Available voices mapped by language code (Revised list for neutral/firm tones)
         const VOICE_MODELS = {
             'en-US': [
-                { name: 'Zephyr', default: true, info: 'Bright and Encouraging' },
-                { name: 'Puck', default: false, info: 'Upbeat' },
-                { name: 'Kore', default: false, info: 'Firm' },
-                { name: 'Fenrir', default: false, info: 'Excitable' },
-                { name: 'Leda', default: false, info: 'Youthful' },
-                { name: 'Orus', default: false, info: 'Firm' },
-                { name: 'Callirrhoe', default: false, info: 'Easy-going' },
-                { name: 'Iapetus', default: false, info: 'Clear' },
-                { name: 'Algieba', default: false, info: 'Smooth' },
-                { name: 'Algenib', default: false, info: 'Gravelly' },
+                // Removed: Zephyr (Bright), Puck (Upbeat), Fenrir (Excitable), Leda (Youthful)
+                { name: 'Kore', default: true, info: 'Firm and Clear' },
+                { name: 'Iapetus', default: false, info: 'Clear and Neutral' },
+                { name: 'Orus', default: false, info: 'Authoritative' },
+                { name: 'Algieba', default: false, info: 'Smooth and Measured' },
+                { name: 'Sulafat', default: false, info: 'Warm and Gentle' },
                 { name: 'Achird', default: false, info: 'Friendly' },
-                { name: 'Sulafat', default: false, info: 'Warm' }
+                { name: 'Callirrhoe', default: false, info: 'Easy-going' },
+                { name: 'Algenib', default: false, info: 'Gravelly and Deep' }
             ],
             'de-DE': [
-                { name: 'Charon', default: true, info: 'Informative' },
-                { name: 'Iapetus', default: false, info: 'Clear' },
-                { name: 'Aoede', default: false, info: 'Breezy' },
+                // Kept all, but changed default to a more neutral tone
+                { name: 'Iapetus', default: true, info: 'Clear and Neutral' },
+                { name: 'Charon', default: false, info: 'Informative' },
                 { name: 'Umbriel', default: false, info: 'Easy-going' },
                 { name: 'Despina', default: false, info: 'Smooth' },
                 { name: 'Erinome', default: false, info: 'Clear' },
                 { name: 'Rasalgethi', default: false, info: 'Informative' },
                 { name: 'Achernar', default: false, info: 'Soft' },
-                { name: 'Schedar', default: false, info: 'Even' },
-                { name: 'Gacrux', default: false, info: 'Mature' },
+                { name: 'Schedar', default: false, info: 'Even and Measured' },
+                { name: 'Gacrux', default: false, info: 'Mature and Steady' },
                 { name: 'Zubenelgenubi', default: false, info: 'Casual' },
-                { name: 'Vindemiatrix', default: false, info: 'Gentle' }
+                { name: 'Vindemiatrix', default: false, info: 'Gentle' },
+                { name: 'Aoede', default: false, info: 'Breezy' }
             ],
             'cs-CZ': [
-                { name: 'Puck', default: true, info: 'Upbeat' },
-                { name: 'Kore', default: false, info: 'Firm' },
-                { name: 'Zephyr', default: false, info: 'Bright' },
-                { name: 'Autonoe', default: false, info: 'Bright' },
-                { name: 'Enceladus', default: false, info: 'Breathy' },
-                { name: 'Laomedeia', default: false, info: 'Upbeat' },
+                // Removed: Puck (Upbeat), Zephyr (Bright), Autonoe (Bright), Laomedeia (Upbeat), Fenrir (Excitable), Leda (Youthful)
+                { name: 'Kore', default: true, info: 'Firm and Steady' },
                 { name: 'Alnilam', default: false, info: 'Firm' },
-                { name: 'Pulcherrima', default: false, info: 'Forward' },
-                { name: 'Sadachbia', default: false, info: 'Lively' },
                 { name: 'Sadaltager', default: false, info: 'Knowledgeable' },
-                { name: 'Fenrir', default: false, info: 'Excitable' },
-                { name: 'Leda', default: false, info: 'Youthful' }
+                { name: 'Enceladus', default: false, info: 'Breathy' },
+                { name: 'Pulcherrima', default: false, info: 'Forward' },
+                { name: 'Sadachbia', default: false, info: 'Lively (Mild)' }
             ],
         };
         
@@ -230,7 +220,7 @@
                 15: { action: "Quick break! You've earned a few minutes of relaxation.", type: 'routine' },
                 10: { action: "Prepare to leave. Comb your hair and choose your final layer of clothes according to the weather.", type: 'routine' },
                 5: { action: "Almost there! Drink some water and get your shoes ready by the door. Let's leave soon!", type: 'routine' },
-                0: { action: "GO! Shoes on, backpack ready, wait in the corridor. It will be a fantastic day!", type: 'routine' },
+                0: { action: "GO! Shoes on, backpack ready, wait in the corridor. Have a fantastic day!", type: 'routine' },
             },
             'de-DE': {
                 60: { action: "Wach auf, Schlafmütze! Kein Stress, aber der neue Tag wartet auf dich.", type: 'routine' },
@@ -245,7 +235,7 @@
                 15: { action: "Kurze Pause! Du hast dir ein paar Minuten Entspannung verdient.", type: 'routine' },
                 10: { action: "Mach dich bereit zum Aufbruch. Kämm dir die Haare und wähle die letzte Kleidungsschicht entsprechend dem Wetter.", type: 'routine' },
                 5: { action: "Fast geschafft! Trink etwas Wasser und stell deine Schuhe an die Tür. Lass uns bald gehen!", type: 'routine' },
-                0: { action: "LOS! Schuhe an, Rucksack bereit, im Flur warten. Es wird einen fantastischen Tag!", type: 'routine' },
+                0: { action: "LOS! Schuhe an, Rucksack bereit, im Flur warten. Hab einen fantastischen Tag!", type: 'routine' },
             },
             'cs-CZ': {
                 60: { action: "Vstávej, ospalče! Nikam nespěchej, ale nový den už čeká.", type: 'routine' },
@@ -256,11 +246,11 @@
                 40: { action: "Čas na snídani! Naber energii na všechny dnešní zábavné aktivity.", type: 'routine' },
                 30: { action: "Už jen půl hodiny! Jdi si vyčistit zuby, dokud se nebudou lesknout.", type: 'routine' },
                 25: { action: "Pojďme připravit svačinu. Co si dneska zabalíš za dobrotu?", type: 'routine' },
-                20: { action: "Kontrola batohu! Co potřebuješ do školy a nezapomeň na svůj dnešní kroužek!", type: 'routine' },
+                20: { action: "Kontrola batohu! Co potřebuješ do školy a nezapomeň na svůj 'krouzek' nebo kroužek dnes!", type: 'routine' },
                 15: { action: "Rychlá pauza! Zasloužil sis pár minut odpočinku.", type: 'routine' },
                 10: { action: "Připrav se k odchodu. Učeš si vlasy a vyber si vrchní vrstvu oblečení podle počasí.", type: 'routine' },
-                5: { action: "Skoro p;jdem! Napij se vody a připrav si boty ke dveřím. Pojďme brzy!", type: 'routine' },
-                0: { action: "Pojďme Pojďme! Boty na nohy, připrav batoh, počkej na chodbě. Bude fantastický den!", type: 'routine' },
+                5: { action: "Už skoro! Napij se vody a připrav si boty ke dveřím. Pojďme brzy!", type: 'routine' },
+                0: { action: "JDI! Boty na nohy, batoh připravený, počkej na chodbě. Měj fantastický den!", type: 'routine' },
             },
         };
         const SCHEDULED_MINUTES = [60, 55, 52, 50, 45, 40, 30, 25, 20, 15, 10, 5, 0];
@@ -337,6 +327,7 @@
                 const option = document.createElement('option');
                 option.value = v.name;
                 option.textContent = `${v.name} (${v.info})`;
+                option.defaultSelected = v.default;
                 voiceSelect.appendChild(option);
             });
         }
@@ -592,11 +583,15 @@
                 if (m > 0) parts.push(`${m} ${m === 1 ? 'minute' : 'minutes'}`);
                 return parts.join(' and ');
             };
+            
+            // Tone instruction for non-gimmicky, firm European preference
+            const toneInstruction = `Say with a calm and clear tone:`;
+
 
             // 1. Routine Step (Priority 1)
             if (isRoutineStep && routineAction) {
                 const timePrefix = totalMinutesRemaining === 0 ? '' : `You have ${timeString(hours, minutes)} remaining. `;
-                return `Say with a bright and encouraging tone: "${timePrefix}${routineAction}"`;
+                return `${toneInstruction} "${timePrefix}${routineAction}"`;
             }
 
             // 2. Interval Reminder (Priority 2)
@@ -618,15 +613,15 @@
                     if (lang === 'de-DE') {
                          return `Sage mit einer freundlichen Stimme: "Kurze Kontrolle! Deine nächste Aufgabe, ${nextAction}, kommt ${nextTimeStr(timeToNext)}."`;
                     } else if (lang === 'cs-CZ') {
-                         return `Řekněte jasným hlasem: "Rychlá kontrola! Tvůj další velký úkol, ${nextAction}, se blíží ${nextTimeStr(timeToNext)}."`;
+                         return `Řekněte jasným hlasem: "Tak jak pokračujes? Tvůj další úkol, ${nextAction}, se blíží ${nextTimeStr(timeToNext)}."`;
                     } else {
-                         return `Say with a supportive and clear tone: "${reminderText}"`;
+                         return `${toneInstruction} "${reminderText}"`;
                     }
                 }
             }
             
             // Fallback
-            return `Say: "Attention! You have ${timeString(hours, minutes)} remaining. Please proceed with your routine."`;
+            return `${toneInstruction} "Attention! You have ${timeString(hours, minutes)} remaining. Please proceed with your routine."`;
         }
 
         /**
@@ -764,8 +759,6 @@
             countdownInterval = setInterval(updateCountdown, 5000);
         }
 
-        // IMPORTANT FIX: Call initialization directly at the end of the script block.
-        // This avoids conflicts with specific preview environments that break window.onload for inline modules.
         initializeFirebase(); 
     </script>
 </body>
